@@ -1,0 +1,55 @@
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dart-lang/setup-dart@v1
+        with:
+          sdk: stable
+
+      - name: Get packages
+        run: dart pub get
+
+      - name: Build photo list
+        run: dart run tool/build_manifest.dart
+
+      - name: Compile Dart to JavaScript
+        run: |
+          mkdir -p build
+          cp -r web/* build/
+          rm -f build/main.dart build/photos/*.md build/photos/*.txt
+          dart compile js -O2 --no-source-maps -o build/main.dart.js web/main.dart
+          rm -f build/main.dart.js.deps
+          touch build/.nojekyll
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: build
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
